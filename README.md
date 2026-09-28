@@ -42,3 +42,11 @@ Cobot 采集及评测数据统一规划在 `/home/agilex/jiaan/data/`。模型�
 π0.5 in_the_pot 保留原始 2,000 步与 DAgger 续训 3,000 步的来源关系，不能因暴露的 checkpoint 名称不同而混淆总训练历程。
 
 2026-09-27 归属更新：独立 ops 项目已取消；本次仅修正协作与 runtime 归属，不代表本项目旧业务资产已迁移。
+
+## 现有数据位置与共享方式（2026-09-28）
+
+用户确认原始采集与现场评测只在Cobot，当前部署checkpoint也归Cobot；训练中间checkpoint和停止部署的历史模型归A6000，同一资产不跨机器长期重复保存。场景数据可供多个模型使用，训练子集/mask/转换版本通过manifest关联。
+
+现有in_the_pot原始DAgger rollout在/home/agilex/cobot_magic/task5/jiaan/hil_realworld_rl/data/raw_rollouts/in_the_pot（6.07GiB）；对应LeRobot产物在同一data下lerobot/in_the_pot（0.47GiB）。task3旧数据在/home/agilex/cobot_magic/task3/jiaan/datasets/in_the_pot（0.40GiB）和/home/agilex/cobot_magic/task3/jiaan/realworld_rl/data/task5-rlt-r1/in_the_pot（1.16GiB）。不同格式的产物不能仅凭共同来源视为重复。
+
+当前新采集根为/home/agilex/jiaan/data/，场景命名目标in_the_pot/、plug_insertion/尚未切换；录制实现仍在cobot-web，数据位置登记不代表本项目业务代码迁移已完成。完整路径/空间清单见同级cobot-web/docs/STORAGE.md。
