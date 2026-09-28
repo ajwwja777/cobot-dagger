@@ -56,3 +56,11 @@ USB 掉线重连后已完成已迁移资产的全量收据复核；尚不能据�
 ## 2026-09-29：职责边界与部署材料
 
 按实际源码、只读现场状态整理，代码先在A6000开发。结构、安装、依赖来源及验证界限见docs/DEPLOYMENT.md；跨项目关系见cobot-web/docs/ARCHITECTURE.md。数据/模型实体未迁移或删除；公共厂商工作区未删除、硬件未重启。guide只写事实、不提交其Git。现场切换与版本见后续发布回执。
+
+## 2026-09-29：正式切换、清理及交付验收
+
+35个采集/HIL/mask领域模块已归本项目，首次发布69ddc94。独立Python3.8 uv环境75项契约测试通过；正式8015使用本项目源码，web只保留API和兼容入口。111条既有RLT历史及首帧JPEG在模型offline时读取通过。
+
+现场验收后清除了web中33个与迁移收据SHA一致的旧领域文件；另两个兼容包入口仍保留。原始数据、标签、HIL/mask和动作参数没有变更；真实按键/示教时序待现场。
+
+主代码位于 /data/LFT-W02_data/jiaan/jiaan/projects/cobot-dagger；现场副本 /home/agilex/jiaan/project/cobot-dagger。后续收尾版本以Git main和现场.release.json为准。guide仅更新事实摘要，不提交其Git。
