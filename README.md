@@ -21,7 +21,7 @@
 
 A6000 负责主代码、Git、维护文档、主要开发验证环境、数据处理和离线评测；训练按资源需要在 A6000／已授权训练机进行。Cobot 只部署本项目现场实际需要的硬件、采集、推理、网页或维护组件，不复制仿真资产和完整训练环境。
 
-Cobot 采集及评测数据统一规划在 `/home/agilex/jiaan/data/`。模型放所属项目的 `models/`（上游已有 `checkpoints/` 等目录时保留其源码布局，由配置明确实际权重位置）；同一资产跨项目引用，避免重复复制。现场服务日志、PID 和状态归实际负责项目；网页编排任务使用 `cobot-web/runtime/`；训练 checkpoint、配置和指标保留在所属项目 `outputs/<实验>/`。环境、模型、大数据与 runtime 不入 Git。
+Cobot 数据与模型统一在 /media/agilex/Getea1/jiaan/data/ 和 /media/agilex/Getea1/jiaan/model/。数据按场景分、模型按项目/模型分；本轮不新增 A6000 权重备份。代码、安装环境、运行日志与 PID 留在 /home/agilex/jiaan/project/<项目>/。完整路径与批次状态见相邻 cobot-web/docs/STORAGE.md。
 
 ## 项目协作
 
@@ -49,4 +49,5 @@ Cobot 采集及评测数据统一规划在 `/home/agilex/jiaan/data/`。模型�
 
 现有in_the_pot原始DAgger rollout在/home/agilex/cobot_magic/task5/jiaan/hil_realworld_rl/data/raw_rollouts/in_the_pot（6.07GiB）；对应LeRobot产物在同一data下lerobot/in_the_pot（0.47GiB）。task3旧数据在/home/agilex/cobot_magic/task3/jiaan/datasets/in_the_pot（0.40GiB）和/home/agilex/cobot_magic/task3/jiaan/realworld_rl/data/task5-rlt-r1/in_the_pot（1.16GiB）。不同格式的产物不能仅凭共同来源视为重复。
 
-当前新采集根为/home/agilex/jiaan/data/，场景命名目标in_the_pot/、plug_insertion/尚未切换；录制实现仍在cobot-web，数据位置登记不代表本项目业务代码迁移已完成。完整路径/空间清单见同级cobot-web/docs/STORAGE.md。
+Cobot 数据与模型统一在 /media/agilex/Getea1/jiaan/data/ 和 /media/agilex/Getea1/jiaan/model/。数据按场景分、模型按项目/模型分；本轮不新增 A6000 权重备份。代码、安装环境、运行日志与 PID 留在 /home/agilex/jiaan/project/<项目>/。完整路径与批次状态见相邻 cobot-web/docs/STORAGE.md。
+录制实现仍在 cobot-web；数据位置整理不代表 DAgger 业务代码已全部迁入。
