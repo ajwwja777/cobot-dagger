@@ -9,7 +9,7 @@
 - 笔记本对话入口：`D:\Code\jiaan_workspace\cobot-dagger`。
 - 自有独立仓库：`https://github.com/ajwwja777/cobot-dagger`（目标分支 `main`）。
 - Cobot 目标部署位置：`/home/agilex/jiaan/project/cobot-dagger`，本轮尚未部署。
-- 当前阶段：入口与仓库初始化；旧业务代码、环境、模型和数据尚未迁移，现有服务入口未切换。
+- 当前阶段：领域入口已初始化；场景数据已接入统一存储，录制实现仍在 cobot-web，尚未拆入本仓库。
 
 ## 负责什么
 
@@ -47,7 +47,7 @@ Cobot 数据与模型统一在 /media/agilex/Getea1/jiaan/data/ 和 /media/agile
 
 用户确认原始采集与现场评测只在Cobot，当前部署checkpoint也归Cobot；训练中间checkpoint和停止部署的历史模型归A6000，同一资产不跨机器长期重复保存。场景数据可供多个模型使用，训练子集/mask/转换版本通过manifest关联。
 
-现有in_the_pot原始DAgger rollout在/home/agilex/cobot_magic/task5/jiaan/hil_realworld_rl/data/raw_rollouts/in_the_pot（6.07GiB）；对应LeRobot产物在同一data下lerobot/in_the_pot（0.47GiB）。task3旧数据在/home/agilex/cobot_magic/task3/jiaan/datasets/in_the_pot（0.40GiB）和/home/agilex/cobot_magic/task3/jiaan/realworld_rl/data/task5-rlt-r1/in_the_pot（1.16GiB）。不同格式的产物不能仅凭共同来源视为重复。
+当前 in_the_pot 数据根为 /media/agilex/Getea1/jiaan/data/datasets/in_the_pot/。共享示范在 recordings/demonstrations/legacy，DAgger 原始 rollout 在 recordings/cobot-dagger/round_001，转换产物在 lerobot/dagger_round_001，旧 RLT rollout 在 recordings/rl-platform/rlt/legacy。不同格式的产物不能仅凭共同来源视为重复。
 
 Cobot 数据与模型统一在 /media/agilex/Getea1/jiaan/data/ 和 /media/agilex/Getea1/jiaan/model/。数据按场景分、模型按项目/模型分；本轮不新增 A6000 权重备份。代码、安装环境、运行日志与 PID 留在 /home/agilex/jiaan/project/<项目>/。完整路径与批次状态见相邻 cobot-web/docs/STORAGE.md。
 录制实现仍在 cobot-web；数据位置整理不代表 DAgger 业务代码已全部迁入。
