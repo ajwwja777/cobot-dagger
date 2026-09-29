@@ -70,3 +70,10 @@ USB 掉线重连后已完成已迁移资产的全量收据复核；尚不能据�
 源自用户反馈RLT加载后重复录制偶发recorder_not_ready。LatestMessageCache.snapshot新增clock callable用法，在同一缓存锁内复制后采时，避免先采时再等待锁期间的新callback被误判为负age/不新鲜；传浮点时间的既有采样语义不改，真正未来时间仍拒绝。RolloutRecorder.check_ready提供不创建Episode、不驱动机器人的流/写目录/空间预检，start使用同一实现。
 
 HTTP/API和页面恢复归cobot-web，模型不释放，RL算法不改。254项相关Python通过、1项既有跳过；cache确定性竞态与未来时钟回归通过。没有放宽流过期阈值、修改HIL/mask或训练数据。该竞态并非所有既有503的已证实唯一根因；现场结果见cobot-web/docs/MIGRATION.md对应批次。
+
+
+现场发布与写入验收：dagger dffc3f1 / web 8dd6983 已push并核验远端，同步45/198文件SHA一致；空闲时只重载8015，模型PID1436537及start_ticks9136435、机械臂PID1318293、相机PID1317979保持。正式预检/恢复API均成功，新静态资源SHA与A6000一致。
+
+Session始终stopped/policy_paused，模型保持加载，在独立 datasets/test/recorder_recovery_check_<UUID> 下连续3次直接录制，每次12帧HDF5成功提交；逐轮通过UUID绑定的discard接口删除，无剩余数据/标签/目录。未向Session发start/resume、未归位、未新增Replay，Session generation10及chunk_count18不变。最终模型ready、recorder idle、Session stopped，可手动开始Session；在线Learner仍5090、Actor2545。该验收证明当前录制器可连续写入，不冒充完整推理/HIL轮次或长期稳定性测试。
+
+回执：A6000 /data/LFT-W02_data/jiaan/jiaan/projects/cobot-web/outputs/rlt-recorder-recovery-20260929/{release.json,passive-recording.json,final.json}；Cobot /home/agilex/jiaan/project/cobot-web/runtime/verification/rlt-recorder-recovery-20260929/。详细恢复方式见web/docs/WEB_RECOVERY.md。
