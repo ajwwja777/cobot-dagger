@@ -29,6 +29,8 @@ def inspect_prepared_series(
     store: LabelStore,
     prepared: PreparedSeries,
     identity: SeriesIdentity,
+    *,
+    require_labels: bool = True,
 ) -> Dict[str, object]:
     """Inspect only the latest file while preserving the forward label gate."""
     if not isinstance(store, LabelStore):
@@ -86,5 +88,5 @@ def inspect_prepared_series(
         "latest_episode_uuid": str(record.episode_uuid),
         "latest_episode_index": record.episode_index,
         "latest_labels_complete": complete,
-        "label_blocked": not complete,
+        "label_blocked": require_labels and not complete,
     }

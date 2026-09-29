@@ -77,3 +77,11 @@ HTTP/API和页面恢复归cobot-web，模型不释放，RL算法不改。254项�
 Session始终stopped/policy_paused，模型保持加载，在独立 datasets/test/recorder_recovery_check_<UUID> 下连续3次直接录制，每次12帧HDF5成功提交；逐轮通过UUID绑定的discard接口删除，无剩余数据/标签/目录。未向Session发start/resume、未归位、未新增Replay，Session generation10及chunk_count18不变。最终模型ready、recorder idle、Session stopped，可手动开始Session；在线Learner仍5090、Actor2545。该验收证明当前录制器可连续写入，不冒充完整推理/HIL轮次或长期稳定性测试。
 
 回执：A6000 /data/LFT-W02_data/jiaan/jiaan/projects/cobot-web/outputs/rlt-recorder-recovery-20260929/{release.json,passive-recording.json,final.json}；Cobot /home/agilex/jiaan/project/cobot-web/runtime/verification/rlt-recorder-recovery-20260929/。详细恢复方式见web/docs/WEB_RECOVERY.md。
+
+## 2026-09-29：混用目录的历史未标注记录阻塞 RLT
+
+现场 RLT 开始失败的明确原因是 Task5 latest episode labels are incomplete：选择的 demonstrations/legacy_test 包含其他模型的已完成、未标注人工示范。旧 RLT orphan 恢复只接受同模型/轮次身份，不能处理该示范；旧恢复按钮只预检输入/写入，没有检查目录历史，所以错误重复。
+
+统一录制的 flat 目录允许已有 finalized 未标注记录，保留其标签完整性事实，不自动写 aborted/success/failure，不向 Replay 加数据。legacy 独立接口仍默认要求标签；真正 incomplete、损坏或身份无效的末条记录仍拦截。采集领域提供显式 require_labels 参数；web 挂载接口选择策略，不重复维护数据判断。
+
+网页“检查录制 / 恢复录制（保留模型）”使用同一个目录检查入口，显示检查路径、具体完整性错误与处理建议，新故障清除旧通过提示。不开始推理、不卸载模型、不删除历史数据。64项Python相关回归通过，45项前端通过。现场切换及版本另记；不能将离线测试当作真实推理验收。
