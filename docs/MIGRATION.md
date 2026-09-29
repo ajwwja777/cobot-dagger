@@ -64,3 +64,9 @@ USB 掉线重连后已完成已迁移资产的全量收据复核；尚不能据�
 现场验收后清除了web中33个与迁移收据SHA一致的旧领域文件；另两个兼容包入口仍保留。原始数据、标签、HIL/mask和动作参数没有变更；真实按键/示教时序待现场。
 
 主代码位于 /data/LFT-W02_data/jiaan/jiaan/projects/cobot-dagger；现场副本 /home/agilex/jiaan/project/cobot-dagger。后续收尾版本以Git main和现场.release.json为准。guide仅更新事实摘要，不提交其Git。
+
+## 2026-09-29：实时录制预检时钟竞态
+
+源自用户反馈RLT加载后重复录制偶发recorder_not_ready。LatestMessageCache.snapshot新增clock callable用法，在同一缓存锁内复制后采时，避免先采时再等待锁期间的新callback被误判为负age/不新鲜；传浮点时间的既有采样语义不改，真正未来时间仍拒绝。RolloutRecorder.check_ready提供不创建Episode、不驱动机器人的流/写目录/空间预检，start使用同一实现。
+
+HTTP/API和页面恢复归cobot-web，模型不释放，RL算法不改。254项相关Python通过、1项既有跳过；cache确定性竞态与未来时钟回归通过。没有放宽流过期阈值、修改HIL/mask或训练数据。该竞态并非所有既有503的已证实唯一根因；现场结果见cobot-web/docs/MIGRATION.md对应批次。

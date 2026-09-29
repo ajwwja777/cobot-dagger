@@ -112,7 +112,12 @@ class LatestMessageCache:
             return tuple(self._entries)
 
     def snapshot(self, now: float, keys=None) -> CacheSnapshot:
-        """Copy all current entries under one lock and evaluate freshness at ``now``."""
+        """Copy entries under one lock; a clock callable samples time after the copy.
+
+        Explicit float timestamps preserve historical/sampler semantics. Live
+        preflight should pass its clock, avoiding callbacks newer than a time
+        sampled before waiting for this lock.
+        """
         with self._lock:
             entries = {
                 key: CacheEntry(
@@ -120,4 +125,6 @@ class LatestMessageCache:
                 )
                 for key, entry in self._entries.items() if keys is None or key in keys
             }
+            if callable(now):
+                now = float(now())
         return CacheSnapshot(now=now, entries=entries)

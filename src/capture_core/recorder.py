@@ -90,6 +90,15 @@ class RolloutRecorder:
             self._config.sample_rate_hz * self._config.max_duration_seconds
         )
 
+    def check_ready(self, data_root=None) -> Path:
+        """Probe live inputs and storage without creating an episode or moving."""
+        return validate_preflight(
+            self._config.data_root if data_root is None else data_root,
+            self._cache.snapshot(self._clock),
+            min_free_disk_bytes=self._config.min_free_disk_bytes,
+            disk_usage=self._disk_usage,
+        )
+
     def start(self, request: RecorderStartRequest) -> dict[str, object]:
         if not isinstance(request, RecorderStartRequest):
             raise TypeError("request must be RecorderStartRequest")
@@ -133,18 +142,7 @@ class RolloutRecorder:
             reset_sampler = getattr(self._sampler, "reset", None)
             if callable(reset_sampler):
                 reset_sampler()
-            snapshot = self._cache.snapshot(self._clock())
-            requested_root = (
-                self._config.data_root
-                if request.data_root is None
-                else request.data_root
-            )
-            data_root = validate_preflight(
-                requested_root,
-                snapshot,
-                min_free_disk_bytes=self._config.min_free_disk_bytes,
-                disk_usage=self._disk_usage,
-            )
+            data_root = self.check_ready(request.data_root)
             writer = self._writer_factory(
                 data_root,
                 request.identity,
