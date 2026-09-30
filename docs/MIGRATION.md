@@ -105,3 +105,9 @@ rename后回执提交中断仍可列出已归档文件，未完成文件不会�
 保持不可变HDF5与HIL/节点，不隐式修改Replay。
 隔离PYTHONPATH/src全领域回归78 passed；web调用方后端725 passed/6 skipped。
 现场源码同步与页面运行证据归web迁移记录；本批没有用生产录制做删除/重标注试验。
+
+## 2026-10-01：普通采集历史保留真实结果
+
+来源：用户反馈成功／失败／未知默认显示未知且不能编辑。combined_history 原先用普通采集节点 sidecar 覆盖 HDF5 标签索引，丢失 episode_outcome 和标签完整性；现合并同 UUID 元数据，保留既有结果／标签事实与节点信息。旧目录别名的标签 HTTP 兼容由 web 修复，采集领域的不可变 HDF5、HIL／节点、标签锁和 Replay 边界没有改变。
+
+领域 78 passed；web 新增普通节点／标签合并、旧目录 GET／PUT、HDF5 SHA 不变及历史结果 DOM 回归通过。本批没有给生产 episode 重打标签或删除数据。发布证据见 web outputs/catalog-results-20261001/。

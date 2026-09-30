@@ -9,7 +9,8 @@ def combined_history(root, segmented, *, limit=50, offset=0):
     # A normal recording also has an HDF5 label entry. Prefer its richer node sidecar.
     for item in segmented.list_episodes(data_root=root):
         if str(item.get("episode_outcome", "")).lower() != "aborted":
-            rows[item["episode_uuid"]] = dict(item, history_format="segmented", labelable=bool(rows.get(item["episode_uuid"], {}).get("labelable")))
+            previous = rows.get(item["episode_uuid"], {})
+            rows[item["episode_uuid"]] = dict(previous, **item, history_format="segmented", labelable=bool(previous.get("labelable")))
     from .deferred import list_deferred
     for item in list_deferred(root):
         rows[item['episode_uuid']] = item
