@@ -792,6 +792,11 @@ class LabelStore:
             record = self._find_record(episode_uuid)
             return [dict(item) for item in record.intervention_phases]
 
+    def is_complete_episode_file(self, path: Path) -> bool:
+        """Validate native recording bytes independently of outcome sidecars."""
+        with self._lock:
+            return self._read_record(Path(path)) is not None
+
     def get_labels(self, episode_uuid: UUID | str) -> dict[str, object]:
         """Return derived intervals merged with any server-authored augmentation."""
         with self._lock:
@@ -844,7 +849,7 @@ class LabelStore:
             )
 
     def update_labels(
-        self, episode_uuid: UUID | str, update: Mapping[str, object]
+        self, episode_uuid: UUID | str, update: Mapping[str, object], *, expected_label_updated_at: str | None = None
     ) -> dict[str, object]:
         """Merge a partial update and atomically publish its JSON sidecar."""
         if not isinstance(update, Mapping):
@@ -869,6 +874,8 @@ class LabelStore:
             ):
                 raise LabelValidationError("invalid label_schema_version")
             current = self._read_labels(record)
+            if expected_label_updated_at is not None and current.get('label_updated_at') != expected_label_updated_at:
+                raise LabelConflictError('labels_changed_reload_before_saving')
             merged = dict(current)
             if "operator_nodes" in update:
                 nodes = update["operator_nodes"]

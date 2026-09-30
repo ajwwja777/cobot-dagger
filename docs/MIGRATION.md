@@ -92,3 +92,16 @@ Session始终stopped/policy_paused，模型保持加载，在独立 datasets/tes
 A6000 AGENTS.md 新增本领域范围、当前待办、独立worktree/任务说明和现场单一负责人的约定；
 笔记本对应目录 AGENTS.md 已从旧“初始化”说明更新为正式接管入口。
 本批该项目仅改文档，无业务代码/环境/资产变更或现场动作。guide仅追加项目事实，不提交Git。
+
+
+## 2026-09-30：录制暂存与历史标注版本校验
+
+用户要求录制中断不停止整个任务。本批采集领域新增 closed-file 暂存：
+原文件字节保留在.deferred，旁路回执保留轮次索引/身份/大小/时间/SHA256；历史显示待处理。
+原生排他锁拒绝仍在写入的文件，符号链接/目录逃逸/身份变化被拒绝；显式删除仍保留索引回执。
+rename后回执提交中断仍可列出已归档文件，未完成文件不会隐式变成成功或训练数据。
+普通采集 defer 能在节点/sidecar 收尾错误后结束自己的writer，但仍拒绝活跃worker。
+完整HDF5的历史补标签/重标注使用已有LabelStore，增加锁内expected_label_updated_at校验；
+保持不可变HDF5与HIL/节点，不隐式修改Replay。
+隔离PYTHONPATH/src全领域回归78 passed；web调用方后端725 passed/6 skipped。
+现场源码同步与页面运行证据归web迁移记录；本批没有用生产录制做删除/重标注试验。

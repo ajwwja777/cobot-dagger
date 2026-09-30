@@ -14,7 +14,7 @@ from .schema import IDENTIFIER_RE
 _EPISODE_FILE_RE = re.compile(
     r"^episode_(?P<index>[0-9]{6})\.hdf5(?:\.incomplete)?$"
 )
-_PRESERVED_EPISODE_RE = re.compile(r"^episode_(?P<index>[0-9]{6})\.(?:rlt|labels|failed)\.json$")
+_PRESERVED_EPISODE_RE = re.compile(r"^episode_(?P<index>[0-9]{6})\.(?:rlt|labels|failed|deferred)\.json$")
 _MAX_EPISODE_INDEX = 999999
 
 

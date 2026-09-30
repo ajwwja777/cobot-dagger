@@ -412,6 +412,43 @@ class SegmentedCaptureService:
         except (OSError, ValueError, TypeError):
             return {}
 
+    def defer(self) -> Dict[str, object]:
+        """Close only this writer and retain all artifacts, even if sidecar finalize fails."""
+        from capture_core.deferred import metadata, defer_file
+        from capture_core.labels import LabelStore
+        with self._lock:
+            if self._identity is None or self._recording_data_root is None:
+                raise SegmentedCaptureError('episode_not_active')
+            uuid, root = str(self._identity.episode_uuid), self._recording_data_root
+            self.gate.close()
+            self._monitor_stop.set()
+            try:
+                self.stop()
+            except Exception:
+                status = self.recorder.status()
+                if status.get('state') in {'starting', 'recording', 'stopping'}:
+                    self.recorder.stop()
+            status = self.recorder.status()
+            if status.get('writer_thread_alive') or status.get('acquisition_active') or status.get('publication_status') in {'finalizing','commit_in_progress'}:
+                raise SegmentedCaptureError('recorder_worker_still_active')
+            if status.get('state') in {'error','fatal'}:
+                self.recorder.recover_error()
+            elif status.get('state') not in {'idle','stopped'}:
+                raise SegmentedCaptureError('recorder_not_stopped')
+            path = Path(status['path']) if status.get('path') else None
+            retained = {'episode_uuid': uuid, 'path': str(path) if path else None, 'review_pending': True}
+            if path and path.is_file() and (path.name.endswith('.incomplete') or not LabelStore(root).is_complete_episode_file(path)):
+                expected = metadata(path)
+                if expected.get('episode_uuid') not in {None, uuid}:
+                    raise SegmentedCaptureError('defer_episode_mismatch')
+                expected['relative_path'] = str(path.relative_to(root))
+                retained['deferred_file'] = defer_file(root, expected)
+            self._reducer = self._mode = self._store = self._identity = None
+            self._recording_data_root = None
+            self._monitor_error = None
+            self._finalize_succeeded = False
+            return {**self.status(), 'deferred': True, 'recording_retained': retained}
+
     def discard(self) -> Dict[str, object]:
         """Finalize the owned writer, then permanently remove only this episode."""
         with self._lock:
