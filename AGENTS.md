@@ -5,3 +5,26 @@
 项目：cobot-dagger。目标：统一人工与模型辅助采集、HIL 事件、数据格式、训练 mask、质量校验和 DAgger 迭代流程，训练通过 vla-platform 接入。
 
 当前领域模块已迁入src，参见docs/DEPLOYMENT.md；不得把旧资产登记视为已迁移或把源码 clone 视为运行验证。跨项目问题按项目说明交给对应领域，证据与进展写回所属项目。
+
+## 2026-09-30 按项目接管与并行对话
+
+这是长期项目入口，不再处于“仅初始化”阶段。先读最新记录并核对代码/运行状态；历史旧路径、PID 和未完成描述不能当作当前事实。
+
+- 负责：人工/模型辅助采集、录制写入收尾、HDF5/标签/节点、HIL/mask、数据校验转换与 DAgger 数据流程。
+- 深入阅读：README.md、docs/DEPLOYMENT.md、docs/MIGRATION.md。
+- 实现入口：src/capture_core/（recorder/writer/storage/labels）、src/segmented_capture/、scripts/、tests/。
+- 当前事实：采集领域已从 web 迁入；web 只留 HTTP 与兼容入口。完整未标注历史不阻塞新轮次；incomplete/损坏文件仍需处理。模型退出后 writer 应仍能诊断/收尾。
+- 下一步：验证开始/暂停/节点/保存/放弃、失败/目录切换和 HIL/mask 完整性。未标注不等于成功/失败；放弃不留训练记录；恢复保留的文件不得隐式入 Replay。
+- 边界：控制权来自 control，API/UI 交 web，训练/预处理交 VLA/RL。领域库不发布动作；格式/mask 变更同时验证下游。
+
+用户会在同一项目开多个终端/对话并 fork。fork 不隔离工作树、GPU、端口、模型、Replay 或机器人。
+
+1. 接管先读 git status/diff、git worktree list、实际进程/录制状态及 /data/LFT-W02_data/jiaan/jiaan/scratch/cobot-dagger/coordination/ 下已有任务说明（存在时）。先说明范围和共享资源。仅要求“读取目录 MD，了解项目”时先汇报，不自动训练/重启或执行所有旧待办。
+2. 并行任务各在上述 coordination 下维护一个可读主题名 MD，登记负责人/对话标识、时间、分支/worktree、基线提交、计划文件、GPU/端口/输出和状态；自己的说明自己更新，结束标记完成。临时协调信息不入业务 Git，有用结果写正式文档，不替别的任务认领/完成工作。
+3. 调研默认只读；分析用独立输出/只读快照，不改生产 Replay/权重。并行代码改动用独立分支/worktree，放 scratch/cobot-dagger/<可读主题>/，先核对依赖根/环境，不为 worktree 改生产路径。不在别人工作树切分支、reset、clean、stash 或全量提交。
+4. 同文件/接口交叉先明确归属，独立开发后审核合并和调用方；合并、push、发布串行。共享 main、环境和机器配置不是并行试验区。只提交本任务改动，不 force push，不静默覆盖；合并前重查远端及未提交变化。
+5. Cobot 同时只有一个启停/部署负责人，跨项目共用 /data/LFT-W02_data/jiaan/jiaan/scratch/cobot-web/coordination/cobot-live.md 说明（存在时先读）。未明确接管时仅只读/离线工作，不因模型“暂停”就抢 GPU、重启服务或切数据目录。进程锁只提供互斥，不是运动授权；硬件重启/运动前核对现场条件。
+6. 新算法、采样、RTC/异步/EMA/频率使用可选配置、独立实验输出及明确回退。研究可并行；生产模型默认/参数/Replay 修改与运行负责人协调。
+7. A6000 开发验证、所属仓库提交 push 后按清单校验同步 Cobot；区分源码已同步与运行已切换。结果写所属项目及 guide/projects/cobot-dagger/README.md 事实摘要；不改 guide 治理、不提交/推送 guide Git。
+
+主仓库 /data/LFT-W02_data/jiaan/jiaan/projects/cobot-dagger；现场副本 /home/agilex/jiaan/project/cobot-dagger。数据/权重通常引用 Getea1/jiaan/{data,model}，实际登记配置优先（如 NVMe Stage1 路径）；不擅自搬资产。
