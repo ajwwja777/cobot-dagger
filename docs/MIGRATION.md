@@ -113,3 +113,8 @@ rename后回执提交中断仍可列出已归档文件，未完成文件不会�
 领域 78 passed；web 新增普通节点／标签合并、旧目录 GET／PUT、HDF5 SHA 不变及历史结果 DOM 回归通过。本批没有给生产 episode 重打标签或删除数据。发布证据见 web outputs/catalog-results-20261001/。
 
 现场发布事实：2026-10-01 代码已 push 并逐文件 SHA 同步；web 209 个运行文件、RL 6／dagger 2 个本批运行文件一致。仅重载 8015，网页 PID 970937；模型 offline、recorder idle、无 active writer／lease，9 个采样硬件／模型 PID 和 start_ticks 不变。实际 CPU preflight 使用 NVMe Stage1 路径且归一化 SHA 与发布清单一致；两个旧目录入口的 8 条历史标签 GET 通过，现场目录和标签响应的 DOM 结果通过。固定 5000 文件与原历史标签 SHA 不变。未运行现场在线分支、真实动作或连续 50 Hz；真实浏览器视觉验收未完成。回执：cobot-web/outputs/catalog-results-20261001/。
+
+
+## 2026-10-08：录制积压诊断与采样调度修复
+
+录制迟到补采问题已用确定性测试复现并修复；增加有界队列/时延诊断。领域80项、跨项目78项、现场合成480帧通过。原始控制停顿的唯一根因仍证据不足，未重载服务或真机运动。详见 docs/audits/2026-10-08-recorder-backpressure.md 及 outputs/recorder-backpressure-20261008。

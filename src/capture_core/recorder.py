@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import logging
 import shutil
 import time
 from contextlib import nullcontext
@@ -18,6 +19,9 @@ from .ros_cache import LatestMessageCache
 from .sampler import FrameSampler
 from .schema import EpisodeIdentity, FrameSample
 from .validation import is_disk_below_threshold, validate_preflight
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class RecorderError(RuntimeError):
@@ -84,6 +88,32 @@ class RolloutRecorder:
         self._writer_thread: Thread | None = None
         self._max_timesteps = 0
         self._active_data_root = self._config.data_root
+        self._reset_timing()
+
+    def _reset_timing(self) -> None:
+        self._writer_started_at = None
+        self._writer_last_ms = self._writer_max_ms = 0.0
+        self._sample_last_ms = self._sample_max_ms = 0.0
+        self._disk_check_last_ms = self._disk_check_max_ms = 0.0
+        self._queue_high_watermark = 0
+        self._missed_sample_ticks = 0
+
+    def _timing_status(self) -> dict[str, object]:
+        # Caller holds the recorder lock; no HDF5 or disk operation here.
+        return {
+            "queue_depth": 0 if self._queue is None else self._queue.qsize(),
+            "queue_capacity": self._config.writer_queue_capacity,
+            "queue_high_watermark": self._queue_high_watermark,
+            "writer_inflight_ms": 0.0 if self._writer_started_at is None else
+                max(0.0, (time.monotonic() - self._writer_started_at) * 1000.0),
+            "writer_last_ms": self._writer_last_ms,
+            "writer_max_ms": self._writer_max_ms,
+            "sample_last_ms": self._sample_last_ms,
+            "sample_max_ms": self._sample_max_ms,
+            "disk_check_last_ms": self._disk_check_last_ms,
+            "disk_check_max_ms": self._disk_check_max_ms,
+            "missed_sample_ticks": self._missed_sample_ticks,
+        }
 
     def _maximum_configured_timesteps(self) -> int:
         return math.ceil(
@@ -181,6 +211,7 @@ class RolloutRecorder:
                 self._max_timesteps = max_timesteps
                 self._frames_sampled = 0
                 self._frames_written = 0
+                self._reset_timing()
                 self._error = None
                 self._completion_state = "complete"
                 self._termination_reason = "max_timesteps"
@@ -237,6 +268,10 @@ class RolloutRecorder:
             self._publication_allowed = False
             self._lifecycle.notify_all()
         self._stop_event.set()
+        with self._lock:
+            timing = self._timing_status()
+        LOGGER.error("recorder_failure reason=%s sampled=%s written=%s timing=%s",
+                     reason, self._frames_sampled, self._frames_written, timing)
 
     def _acquisition_loop(self, identity: EpisodeIdentity) -> None:
         period = self._config.sample_period_seconds
@@ -256,11 +291,16 @@ class RolloutRecorder:
                     else:
                         with self._lock:
                             frame_index = self._frames_sampled
-                        snapshot = self._cache.snapshot(self._clock())
+                        sample_started = time.monotonic()
+                        # Sample time after acquiring the cache lock, as in preflight.
+                        snapshot = self._cache.snapshot(self._clock)
                         frame = self._sampler.sample(snapshot, identity, frame_index)
+                        sample_ms = (time.monotonic() - sample_started) * 1000.0
                         assert self._queue is not None
                         overflow = False
                         with self._lock:
+                            self._sample_last_ms = sample_ms
+                            self._sample_max_ms = max(self._sample_max_ms, sample_ms)
                             if self._stop_event.is_set():
                                 break
                             try:
@@ -269,6 +309,8 @@ class RolloutRecorder:
                                 overflow = True
                             else:
                                 self._frames_sampled += 1
+                                self._queue_high_watermark = max(
+                                    self._queue_high_watermark, self._queue.qsize())
                                 reached_maximum = (
                                     self._frames_sampled >= self._max_timesteps
                                 )
@@ -282,6 +324,7 @@ class RolloutRecorder:
                 if self._stop_event.is_set():
                     break
                 try:
+                    disk_started = time.monotonic()
                     disk_low = is_disk_below_threshold(
                         self._active_data_root,
                         self._config.stop_free_disk_bytes,
@@ -290,6 +333,10 @@ class RolloutRecorder:
                 except Exception as error:  # noqa: BLE001 - thread boundary
                     self._record_error(f"disk_check_error: {error}")
                     break
+                disk_ms = (time.monotonic() - disk_started) * 1000.0
+                with self._lock:
+                    self._disk_check_last_ms = disk_ms
+                    self._disk_check_max_ms = max(self._disk_check_max_ms, disk_ms)
                 if disk_low:
                     with self._lock:
                         self._completion_state = "aborted"
@@ -300,7 +347,15 @@ class RolloutRecorder:
                     self._stop_event.set()
                     break
                 next_tick += period
-                delay = next_tick - self._clock()
+                now = self._clock()
+                if next_tick <= now:
+                    # Missed sensor samples cannot be recovered by repeatedly
+                    # reading the latest cache. Preserve the gap in timestamps.
+                    missed = math.floor((now - next_tick) / period) + 1
+                    next_tick += missed * period
+                    with self._lock:
+                        self._missed_sample_ticks += missed
+                delay = next_tick - now
                 if delay > 0:
                     self._stop_event.wait(delay)
         except Exception as error:  # noqa: BLE001 - propagate worker failure
@@ -332,6 +387,8 @@ class RolloutRecorder:
                         return
                     break
                 try:
+                    with self._lock:
+                        self._writer_started_at = time.monotonic()
                     self._writer.append(frame)
                     with self._lock:
                         self._frames_written += 1
@@ -340,6 +397,11 @@ class RolloutRecorder:
                     self._abort_after_error(f"writer_error: {write_error}")
                     return
                 finally:
+                    with self._lock:
+                        if self._writer_started_at is not None:
+                            self._writer_last_ms = (time.monotonic() - self._writer_started_at) * 1000.0
+                            self._writer_max_ms = max(self._writer_max_ms, self._writer_last_ms)
+                            self._writer_started_at = None
                     self._queue.task_done()
             with self._lock:
                 frames_written = self._frames_written
@@ -541,6 +603,7 @@ class RolloutRecorder:
                 "publication_allowed": self._publication_allowed,
                 "publication_status": self._publication_status(self._writer),
                 "capture_enabled": capture_enabled,
+                "timing": self._timing_status(),
             }
         # Return a fresh plain dict for API serialization and caller isolation.
         return status
