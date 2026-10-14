@@ -62,6 +62,17 @@ def inspect_prepared_series(
     if latest_incomplete is not None and (
         latest_finalized is None or latest_incomplete >= latest_finalized
     ):
+        from segmented_capture.node_outcome import inspect_closed_node_file
+        node = inspect_closed_node_file(
+            directory / f"episode_{latest_incomplete:06d}.hdf5.incomplete", prepared.data_root)
+        if node is not None:
+            complete = node["episode_outcome"] in {"success", "failure"}
+            return {"episode_count": len(finalized) + 1,
+                    "latest_episode_uuid": node["episode_uuid"],
+                    "latest_episode_index": latest_incomplete,
+                    "latest_labels_complete": complete,
+                    "label_blocked": require_labels and not complete,
+                    "latest_node_only": True}
         raise LabelValidationError("latest_episode_incomplete")
 
     if latest_finalized is None:
