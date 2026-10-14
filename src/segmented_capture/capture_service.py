@@ -69,6 +69,7 @@ class SegmentedCaptureService:
         self._monitor_thread: Optional[Thread] = None
         self._monitor_error: Optional[str] = None
         self._finalize_succeeded = False
+        self._review_video = None
 
     def _selected_sidecar_root(self, data_root: Optional[Path] = None) -> Path:
         if self.sidecar_root is not None:
@@ -158,7 +159,13 @@ class SegmentedCaptureService:
         )
 
     def _plain(self, snapshot: CaptureSnapshot) -> Dict[str, object]:
+        from .review_video import read_review_video
+        video = self._review_video
+        review = ({"state": "error" if video.error else "recording", "source_frame_count": len(video.timestamps),
+                   "review_only": True, "error": video.error} if video else
+                  read_review_video(self._store.episode_root) if self._store else None)
         return {
+            "review_video": {k: v for k, v in (review or {}).items() if k != "frame_timestamps"} or None,
             "episode_uuid": snapshot.episode_uuid,
             "capture_state": snapshot.capture_state.value,
             "generation": snapshot.generation,
@@ -171,7 +178,7 @@ class SegmentedCaptureService:
             },
         }
 
-    def start(self, identity: EpisodeIdentity, *, data_root: Path) -> Dict[str, object]:
+    def start(self, identity: EpisodeIdentity, *, data_root: Path, review_video: bool = False) -> Dict[str, object]:
         with self._lock:
             if self.active:
                 raise SegmentedCaptureError("episode_already_active")
@@ -220,12 +227,20 @@ class SegmentedCaptureService:
                 self.gate.open()
             else:
                 self.gate.close()
+            self._review_video = None
             try:
+                if review_video:
+                    from .review_video import ReviewVideo
+                    self._review_video = ReviewVideo(self._store.episode_root, self.cache, clock=self.clock)
+                    self._review_video.start()
                 self.recorder.start(
                     RecorderStartRequest(identity=identity, data_root=Path(data_root))
                 )
             except Exception:
                 self.gate.close()
+                if self._review_video and self._review_video.process:
+                    self._review_video.stop()
+                self._review_video = None
                 raise
             self._monitor_error = None
             self._finalize_succeeded = False
@@ -367,12 +382,20 @@ class SegmentedCaptureService:
             else:
                 node = self._capture_node_snapshot(len(current.nodes) + 1, frame)
             stopped = self._reducer.stop(node)
-            self.recorder.stop()
+            try:
+                self.recorder.stop()
+            finally:
+                self._stop_review_video()
             final_frame = self._frame_count()
             self._store.sync_frame_count(final_frame)
             result = self._store.finalize(stopped)
             self._finalize_succeeded = True
             return result
+
+    def _stop_review_video(self):
+        video, self._review_video = self._review_video, None
+        if video:
+            video.stop()
 
     def finalized_successfully(self) -> bool:
         """True only after both recorder stop and atomic sidecar finalize returned."""
@@ -435,6 +458,7 @@ class SegmentedCaptureService:
                 status = self.recorder.status()
                 if status.get('state') in {'starting', 'recording', 'stopping'}:
                     self.recorder.stop()
+            self._stop_review_video()
             status = self.recorder.status()
             if status.get('writer_thread_alive') or status.get('acquisition_active') or status.get('publication_status') in {'finalizing','commit_in_progress'}:
                 raise SegmentedCaptureError('recorder_worker_still_active')
@@ -509,7 +533,20 @@ class SegmentedCaptureService:
         if not sidecar.exists():
             sidecar = root / "sidecar.json.incomplete"
         with sidecar.open("r", encoding="utf-8") as stream:
-            return json.load(stream)
+            payload = json.load(stream)
+        from .review_video import read_review_video
+        payload["review_video"] = read_review_video(root)
+        return payload
+
+    def review_video_path(self, episode_uuid, *, data_root=None):
+        root = self._episode_root(episode_uuid, data_root=data_root)
+        from .review_video import read_review_video
+        video = read_review_video(root)
+        if not video or video.get("state") != "ready":
+            raise FileNotFoundError("review_video_not_ready")
+        path = root / "review.mp4"
+        path.resolve().relative_to(self._selected_sidecar_root(data_root).resolve())
+        return path
 
     def list_episodes(
         self,
@@ -556,6 +593,8 @@ class SegmentedCaptureService:
                     payload = json.load(stream)
             except (OSError, ValueError, KeyError, json.JSONDecodeError):
                 continue
+            from .review_video import read_review_video
+            video = read_review_video(path.parent)
             episodes.append(
                 {
                     "episode_uuid": episode_uuid,
@@ -567,6 +606,8 @@ class SegmentedCaptureService:
                     "capture_state": payload.get("capture_state"),
                     "training_frame_count": payload.get("training_frame_count", 0),
                     "node_count": len(payload.get("nodes", [])),
+                    "review_video": {k: v for k, v in (video or {}).items() if k != "frame_timestamps"} or None,
+                    "video_available": bool(video and video.get("state") == "ready") or bool(payload.get("training_frame_count", 0)),
                     **self._outcome_summary(payload, data_root),
                     "last_timestamp": (
                         payload.get("nodes", [{}])[-1].get("sample_timestamp", 0)
