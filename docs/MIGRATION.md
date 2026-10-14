@@ -147,3 +147,8 @@ Web 7438333仅对expo_online启用该录像，回放/HIL分别计数；旧零HIL
 7运行文件提交push后按旧/新SHA与模型操作锁安装；仅重载Web，保持相机订阅至新Web健康，再退出订阅。Runtime378049/Actor379952启动时间不变，Learner1070338仍在LFT2 GPU1；模型paused、Online ready、completed2/online326/warmup_remaining8、Critic/VLA0、版本0=served0，目录下一条3。两个历史preview均HTTP200 unavailable，失败结果保留，三路新鲜、ROS readiness ok。Web重载后Session inactive，用户刷新页面重新开始Session后采集。新版本的真实运动rollout/HIL视频验收仍由用户执行。
 
 证据：/data/LFT-W02_data/jiaan/jiaan/projects/rl-platform/outputs/expo-native-remote-20261014/verification/edit001-online/review-video/，含测试日志、source/manifest、安装/切换/HTTP回执及只读相机MP4；跨机文件逐项SHA核验见receipts.json。
+
+
+## 2026-10-14 已完成零HIL回合的录制检查
+
+e238ffa把节点sidecar只读验证从结果写入中复用出来。series_inspection仅在HDF5为error/empty_episode、无任何帧dataset、UUID/index/源路径/任务字段与committed零HIL sidecar严格一致且有持久化结果时，认可上一回合已结束；不更改HDF5 incomplete标记、不允许其作为训练数据。真正未结束、含帧、错误身份/源路径或未持久化结果仍拒绝。53相关后端测试通过，包含真实writer无HIL结果及故障注入；现场两回合数据未改，录制检查ok/next3。代码已push并同步，UI重载激活。证据：/data/LFT-W02_data/jiaan/jiaan/projects/rl-platform/outputs/expo-native-remote-20261014/verification/edit001-online/start-blocker；完整页面目录竞争归cobot-web/docs/MIGRATION.md。
