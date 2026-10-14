@@ -388,8 +388,11 @@ class SegmentedCaptureService:
         with self._lock:
             if not self.finalized_successfully() or self._identity is None or self._recording_data_root is None:
                 raise SegmentedCaptureError("episode_not_finalized")
-            store = LabelStore(self._recording_data_root)
             uuid = str(self._identity.episode_uuid)
+            if self._frame_count() == 0 and self._store is not None:
+                from .node_outcome import write_node_outcome
+                return write_node_outcome(self._store.sidecar, uuid, outcome)
+            store = LabelStore(self._recording_data_root)
             if outcome in {"success", "failure"}:
                 return store.set_outcome(uuid, outcome)
             if outcome != "unknown":
@@ -399,6 +402,10 @@ class SegmentedCaptureService:
 
     @staticmethod
     def _outcome_summary(payload, data_root):
+        if (payload.get("outcome_storage") == "segmented_sidecar"
+                and payload.get("training_frame_count") == 0
+                and payload.get("episode_outcome") in {"success", "failure", "unknown"}):
+            return {"episode_outcome": payload["episode_outcome"], "has_hil": False}
         if data_root is None or not payload.get("source_hdf5_relative"):
             return {}
         root = Path(data_root).resolve()
