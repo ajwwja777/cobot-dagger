@@ -152,3 +152,12 @@ Web 7438333仅对expo_online启用该录像，回放/HIL分别计数；旧零HIL
 ## 2026-10-14 已完成零HIL回合的录制检查
 
 e238ffa把节点sidecar只读验证从结果写入中复用出来。series_inspection仅在HDF5为error/empty_episode、无任何帧dataset、UUID/index/源路径/任务字段与committed零HIL sidecar严格一致且有持久化结果时，认可上一回合已结束；不更改HDF5 incomplete标记、不允许其作为训练数据。真正未结束、含帧、错误身份/源路径或未持久化结果仍拒绝。53相关后端测试通过，包含真实writer无HIL结果及故障注入；现场两回合数据未改，录制检查ok/next3。代码已push并同步，UI重载激活。证据：/data/LFT-W02_data/jiaan/jiaan/projects/rl-platform/outputs/expo-native-remote-20261014/verification/edit001-online/start-blocker；完整页面目录竞争归cobot-web/docs/MIGRATION.md。
+
+
+## 2026-11-13：命名轨迹与部署原视频接入
+
+来源：用户要求将原 record/replay 命令集成网页；record 放数采，replay 放部署，支持命名，以及可选保存三路不压缩原视频。源码已提交并推送：Web `de4a8af9a3cfa238f56e5a04e5a1533dc4bfd1f3`、control `d1699b647971c5b0f61c8512acdff1b6f33478e1`、dagger `b1c6da1f1de532ef0d44dbb357122671931afb78`。
+
+src/capture_core/uncompressed_video.py 新增三路独立原分辨率BGR8 rawvideo AVI，直接只读订阅既有原图话题，不用预览缓存、JPEG、缩放/拼图/H.264，不打开HIL门控或写训练Replay。每路单独文件及真实源/到达时间戳、序号清单，video.json记录轮次身份与结果；AVI容器时间基30fps，与机器人动作Hz独立。64帧队列隔离写盘，溢出、源缺帧、尺寸变化、过期、磁盘余量和编码退出可见，部分视频保留为incomplete。录像错误不发布动作或释放模型；开始前缺相机时由调用方阻止该次开始，用户可关闭选项再用。
+
+5项新增测试通过，含真实ffmpeg三路文件codec/尺寸检查及解码逐像素一致、队列满、序号缺口/过期、低余量和模拟ROS三订阅收尾manifest。跨项目针对性138通过/1既有跳过、前端146通过，Chromium入口通过。一个新领域模块按SHA随10文件安装，用户仅重载网页；现场三相机原本unavailable并保持，不启动相机/录制/动作，真实长视频吞吐未验收。默认自选视频根由Web已有目录校验负责，默认 `/media/agilex/Getea1/jiaan/data/videos/deployment`。详细证据cobot-web/outputs/motion-video-20261113/及现场cobot-web/runtime/verification/motion-video-20261113/；Guide Git未提交/推送。
