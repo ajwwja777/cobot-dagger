@@ -34,7 +34,7 @@ class CameraFile:
         self.root=Path(root);self.key=key;self.fps=fps;self.reserve=reserve_bytes
         self.queue=Queue(maxsize=queue_frames);self.end=threading.Event()
         self.thread=None;self.process=None;self.error=None;self.frames=0
-        self.last_arrival=None;self.shape=None;self.last_seq=None;self.log=None;self.input_pixel_format=None
+        self.last_arrival=None;self.shape=None;self.last_seq=None;self.log=None;self.input_pixel_format=None;self.received_frames=0;self.queue_peak=0
 
     def start(self):
         self.thread=threading.Thread(target=self._run,name="video-"+self.key,daemon=True);self.thread.start()
@@ -51,7 +51,9 @@ class CameraFile:
             if sequence is not None and self.last_seq is not None and sequence!=self.last_seq+1:
                 raise ValueError("source sequence gap: %s -> %s"%(self.last_seq,sequence))
             self.last_seq=sequence;self.last_arrival=time.monotonic()
+            self.received_frames+=1
             self.queue.put_nowait((np.array(value,copy=True,order="C"),float(stamp),sequence,self.last_arrival))
+            self.queue_peak=max(self.queue_peak,self.queue.qsize())
         except (ValueError,Full) as exc:
             self.error=str(exc) or "video queue full; archive incomplete"
             self.end.set()
@@ -112,7 +114,7 @@ class CameraFile:
         if not self.end.is_set() and age is not None and age>2:
             self.error=self.error or "camera stream stale";self.end.set()
         error=self.error
-        return {"frames":self.frames,"error":error,"width":self.dimensions()[0] if self.shape else None,
+        return {"frames":self.frames,"received_frames":self.received_frames,"queue_depth":self.queue.qsize(),"queue_peak":self.queue_peak,"queue_capacity":self.queue.maxsize,"error":error,"width":self.dimensions()[0] if self.shape else None,
                 "height":self.dimensions()[1] if self.shape else None,
                 "input_pixel_format":self.input_pixel_format,"source_width":self.shape[1] if self.shape else None,"source_height":self.shape[0] if self.shape else None,"codec":self.encoding,
                 "pixel_format":"yuv420p" if self.encoding=="h264" else "bgr24", "crf":14 if self.encoding=="h264" else None, "max_resolution":[1920,1080] if self.encoding=="h264" else None,
