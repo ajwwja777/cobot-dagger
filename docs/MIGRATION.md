@@ -170,3 +170,12 @@ src/capture_core/uncompressed_video.py 新增三路独立原分辨率BGR8 rawvid
 新增scripts/convert_deployment_videos.py与领域browser_video.py：只转换已收尾raw AVI，逐路单线程生成独立MP4，源前后SHA一致、解码帧数匹配后原子登记browser-video.json；不覆盖未知已有输出，可重复核验继续。现场两次motion归档6个AVI合计7,756,501,212bytes，新增MP4合计74,185,371bytes；帧数2090×3与715/716/715全部保留，当前640×480。原AVI、manifest、逐帧时间戳未改。压缩有损，不宣称像素一致。
 
 51跨项目相关CPU通过/1既有跳过、151Web前端通过；原raw像素往返显式配置回归保留，新增默认MP4编码/1080p上限/真实旧片转换/源SHA和帧数保持。正式浏览器两尺寸三路播放/seek/下载attachment通过，全部6文件完整HTTP SHA与Range206通过。11运行文件安装后仅Web重载，12受保护进程保持、模型offline/captureidle，无现场录制/运动/硬件生命周期。本次长时间新录制吞吐尚未真机验收。完整证据归cobot-web/outputs/video-download-replay-stop-20261113/，现场cobot-web/runtime/verification/video-downloads-mp4-20261115/；资产仍在Getea1/jiaan/data/videos/deployment两次motion目录。详见cobot-web/docs/MIGRATION.md对应节；guide不提交/push。
+
+
+## 2026-11-15：高清 MP4 与原始 RGB 直通优化
+
+用户要求更清晰视频、尽快完成基本确认。Daggerd2196aa将H264/yuv420p CRF20→14，滤镜/编码各1线程，保持浏览器/VS Code兼容及最高1080高比例缩小。Control344ccb2按三台真实USB描述符改1632×1224 MJPEG源，输出1440×1080；不把旧640视频放大伪装高清。工控机三并发合成编码72–74FPS，但实际ROS/CV链路初测两路队列满，49e662b增加RGB8/BGR8原样输入ffmpeg，处理行步长/拷贝连续性及输入编码变化，避开不必要的全分辨率CV转色。
+
+最终9项完整编码回归通过（含RGB补齐行/颜色逐字节验证、原raw像素、native1632→1440尺寸及完整帧数）；此前相关组合105CPU/1跳过、155前端。用户授权下三路10秒实录各303帧、CRF14/1440×1080/H264/yuv420p、saved，无序号/队列错误，ffprobe全解码计数一致。每路约12.09/13.83/14.15MB，下载HEAD MIME/长度验证通过。只录独立诊断视频，不采集HDF5/Replay、不发机器人指令；最终订阅退出、Web839683，模型与机械臂保持。后续真实长回放由用户复核，未冒充长时吞吐验收。
+
+成功视频 /media/agilex/Getea1/jiaan/data/videos/diagnostics/replay-quality-20261115/eval-20261115T152219-1a1f994a-2057341c ，原失败诊断另存，已有视频不改。详细证据cobot-web/outputs/replay-tracking-20261115及现场cobot-web/runtime/verification/replay-tracking-20261115。Guide只摘要不提交/push。
