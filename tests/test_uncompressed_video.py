@@ -120,3 +120,24 @@ def test_native_high_resolution_source_encodes_1440x1080_at_high_quality(tmp_pat
     assert probe['codec_name']=='h264' and probe['pix_fmt']=='yuv420p'
     status=writer.status();assert status['crf']==14 and (status['source_width'],status['source_height'])==(1632,1224)
     assert (status['width'],status['height'])==(1440,1080)
+
+
+def test_native_rgb_ros_path_skips_cv_conversion_and_preserves_stride_and_colors(tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    from capture_core import ros_subscriber
+    from capture_core.uncompressed_video import ThreeCameraVideo,CAMERAS
+    image=np.zeros((12,16,3),dtype=np.uint8);image[:,:,0]=200
+    padded=np.zeros((12,16*3+8),dtype=np.uint8);padded[:,:48]=image.reshape(12,48)
+    def subscribe(topic,kind,callback,**kwargs):
+        for i in range(3):callback(SimpleNamespace(encoding='rgb8',height=12,width=16,step=56,data=padded.tobytes(),header=SimpleNamespace(seq=i,stamp=SimpleNamespace(to_sec=lambda i=i:i/30))))
+        return SimpleNamespace(unregister=lambda:None)
+    bridge=SimpleNamespace(imgmsg_to_cv2=lambda *a,**kw:(_ for _ in ()).throw(AssertionError('unnecessary color conversion')))
+    bindings=SimpleNamespace(rospy=SimpleNamespace(Subscriber=subscribe),image_type=object,cv_bridge_factory=lambda:bridge)
+    monkeypatch.setattr(ros_subscriber,'_load_ros_bindings',lambda:bindings)
+    root=tmp_path/'native';video=ThreeCameraVideo(root,encoding='rawvideo',reserve_bytes=0)
+    video.start();status=video.stop();assert status['state']=='saved'
+    expected=image[:,:,::-1].copy().tobytes()*3
+    for key in CAMERAS:
+        assert status['cameras'][key]['input_pixel_format']=='rgb24'
+        actual=subprocess.check_output(['ffmpeg','-v','error','-i',str(root/(key+'.avi')),'-threads','1','-f','rawvideo','-pix_fmt','bgr24','pipe:1'])
+        assert actual==expected

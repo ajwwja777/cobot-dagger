@@ -34,21 +34,24 @@ class CameraFile:
         self.root=Path(root);self.key=key;self.fps=fps;self.reserve=reserve_bytes
         self.queue=Queue(maxsize=queue_frames);self.end=threading.Event()
         self.thread=None;self.process=None;self.error=None;self.frames=0
-        self.last_arrival=None;self.shape=None;self.last_seq=None;self.log=None
+        self.last_arrival=None;self.shape=None;self.last_seq=None;self.log=None;self.input_pixel_format=None
 
     def start(self):
         self.thread=threading.Thread(target=self._run,name="video-"+self.key,daemon=True);self.thread.start()
 
-    def offer(self, image, *, stamp, sequence=None):
+    def offer(self, image, *, stamp, sequence=None, pixel_format="bgr24"):
         if self.end.is_set() or self.error:return
         try:
             value=np.asarray(image)
-            if value.dtype!=np.uint8 or value.ndim!=3 or value.shape[2]!=3:raise ValueError("expected BGR8 image")
+            if value.dtype!=np.uint8 or value.ndim!=3 or value.shape[2]!=3:raise ValueError("expected RGB8/BGR8 image")
+            if pixel_format not in {"rgb24","bgr24"}:raise ValueError("unsupported input pixel format")
+            if self.input_pixel_format is not None and pixel_format!=self.input_pixel_format:raise ValueError("camera encoding changed")
+            self.input_pixel_format=pixel_format
             if self.shape is not None and value.shape!=self.shape:raise ValueError("camera dimensions changed")
             if sequence is not None and self.last_seq is not None and sequence!=self.last_seq+1:
                 raise ValueError("source sequence gap: %s -> %s"%(self.last_seq,sequence))
             self.last_seq=sequence;self.last_arrival=time.monotonic()
-            self.queue.put_nowait((np.array(value,copy=True),float(stamp),sequence,self.last_arrival))
+            self.queue.put_nowait((np.array(value,copy=True,order="C"),float(stamp),sequence,self.last_arrival))
         except (ValueError,Full) as exc:
             self.error=str(exc) or "video queue full; archive incomplete"
             self.end.set()
@@ -64,7 +67,7 @@ class CameraFile:
                         self.log=(self.root/(self.key+".log")).open("xb")
                         self.process=subprocess.Popen([
                             "ffmpeg","-nostdin","-hide_banner","-loglevel","error","-n",
-                            "-f","rawvideo","-pixel_format","bgr24","-video_size","%dx%d"%(image.shape[1],image.shape[0]),
+                            "-f","rawvideo","-pixel_format",self.input_pixel_format,"-video_size","%dx%d"%(image.shape[1],image.shape[0]),
                             "-framerate",str(self.fps),"-i","pipe:0","-an"] +
                             (browser_encoding_args() if self.encoding=="h264" else ["-threads","1","-c:v","rawvideo","-pix_fmt","bgr24","-f","avi"]) +
                             [str(self.root/(self.key+".incomplete."+self.extension))],stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=self.log)
@@ -111,7 +114,7 @@ class CameraFile:
         error=self.error
         return {"frames":self.frames,"error":error,"width":self.dimensions()[0] if self.shape else None,
                 "height":self.dimensions()[1] if self.shape else None,
-                "source_width":self.shape[1] if self.shape else None,"source_height":self.shape[0] if self.shape else None,"codec":self.encoding,
+                "input_pixel_format":self.input_pixel_format,"source_width":self.shape[1] if self.shape else None,"source_height":self.shape[0] if self.shape else None,"codec":self.encoding,
                 "pixel_format":"yuv420p" if self.encoding=="h264" else "bgr24", "crf":14 if self.encoding=="h264" else None, "max_resolution":[1920,1080] if self.encoding=="h264" else None,
                 "container_fps":self.fps,"timestamps":self.key+".timestamps.jsonl",
                 "file":self.key+("." if self.end.is_set() and not error else ".incomplete.")+self.extension}
@@ -137,8 +140,17 @@ class ThreeCameraVideo:
                 writer=CameraFile(self.root,key,reserve_bytes=self.reserve,encoding=self.encoding);self.writers[key]=writer;writer.start()
                 def receive(msg, writer=writer):
                     try:
-                        image=bridge.imgmsg_to_cv2(msg,desired_encoding="bgr8")
-                        writer.offer(image,stamp=msg.header.stamp.to_sec(),sequence=msg.header.seq)
+                        encoding=getattr(msg,"encoding",None)
+                        if encoding in {"rgb8","bgr8"}:
+                            # Avoid a full-resolution RGB->BGR conversion. Feed the
+                            # original channel order to ffmpeg; honor ROS row stride.
+                            height,width,step=int(msg.height),int(msg.width),int(msg.step)
+                            if min(height,width)<=0 or step<width*3 or len(msg.data)!=height*step:raise ValueError("invalid camera image layout")
+                            image=np.frombuffer(msg.data,dtype=np.uint8).reshape(height,step)[:,:width*3].reshape(height,width,3)
+                            pixel_format="rgb24" if encoding=="rgb8" else "bgr24"
+                        else:
+                            image=bridge.imgmsg_to_cv2(msg,desired_encoding="bgr8");pixel_format="bgr24"
+                        writer.offer(image,stamp=msg.header.stamp.to_sec(),sequence=msg.header.seq,pixel_format=pixel_format)
                     except Exception as exc:writer.error=str(exc);writer.end.set()
                 self.subscribers.append(bindings.rospy.Subscriber(REQUIRED_TOPICS[key],bindings.image_type,receive,queue_size=64,buff_size=64*1024*1024))
             deadline=time.monotonic()+5
