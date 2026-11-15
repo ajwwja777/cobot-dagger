@@ -112,7 +112,7 @@ class CameraFile:
         return {"frames":self.frames,"error":error,"width":self.dimensions()[0] if self.shape else None,
                 "height":self.dimensions()[1] if self.shape else None,
                 "source_width":self.shape[1] if self.shape else None,"source_height":self.shape[0] if self.shape else None,"codec":self.encoding,
-                "pixel_format":"yuv420p" if self.encoding=="h264" else "bgr24", "max_resolution":[1920,1080] if self.encoding=="h264" else None,
+                "pixel_format":"yuv420p" if self.encoding=="h264" else "bgr24", "crf":14 if self.encoding=="h264" else None, "max_resolution":[1920,1080] if self.encoding=="h264" else None,
                 "container_fps":self.fps,"timestamps":self.key+".timestamps.jsonl",
                 "file":self.key+("." if self.end.is_set() and not error else ".incomplete.")+self.extension}
 

@@ -106,3 +106,17 @@ def test_legacy_export_preserves_sources_and_exact_frames(tmp_path):
     assert manifest.read_bytes()==before and convert_archive(root)==output
     manifest.write_text(json.dumps({"state":"recording","uncompressed":True}))
     with pytest.raises(ValueError):convert_archive(root)
+
+
+def test_native_high_resolution_source_encodes_1440x1080_at_high_quality(tmp_path):
+    writer=CameraFile(tmp_path,"camera_left",reserve_bytes=0);writer.start()
+    # Native camera mode is 4:3. No upscaling or 16:9 stretching.
+    image=np.zeros((1224,1632,3),dtype=np.uint8);image[:,::8]=220;image[::8]=220
+    for i in range(3):writer.offer(image,stamp=i/30,sequence=i)
+    writer.stop();assert writer.error is None
+    path=tmp_path/'camera_left.mp4'
+    probe=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_streams','-of','json',str(path)]))['streams'][0]
+    assert (probe['width'],probe['height'])==(1440,1080)
+    assert probe['codec_name']=='h264' and probe['pix_fmt']=='yuv420p'
+    status=writer.status();assert status['crf']==14 and (status['source_width'],status['source_height'])==(1632,1224)
+    assert (status['width'],status['height'])==(1440,1080)

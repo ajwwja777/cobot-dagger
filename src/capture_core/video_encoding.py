@@ -3,6 +3,6 @@
 SCALE = "scale=w='trunc(iw*min(1,min(1920/iw,1080/ih))/2)*2':h='trunc(ih*min(1,min(1920/iw,1080/ih))/2)*2'"
 
 def browser_encoding_args():
-    return ["-vf", SCALE, "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+    return ["-filter_threads", "1", "-vf", SCALE, "-c:v", "libx264", "-preset", "veryfast", "-crf", "14",
             "-profile:v", "main", "-level:v", "4.1", "-pix_fmt", "yuv420p",
             "-threads", "1", "-g", "60", "-movflags", "+faststart", "-f", "mp4"]
