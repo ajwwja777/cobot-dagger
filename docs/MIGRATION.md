@@ -161,3 +161,12 @@ e238ffa把节点sidecar只读验证从结果写入中复用出来。series_inspe
 src/capture_core/uncompressed_video.py 新增三路独立原分辨率BGR8 rawvideo AVI，直接只读订阅既有原图话题，不用预览缓存、JPEG、缩放/拼图/H.264，不打开HIL门控或写训练Replay。每路单独文件及真实源/到达时间戳、序号清单，video.json记录轮次身份与结果；AVI容器时间基30fps，与机器人动作Hz独立。64帧队列隔离写盘，溢出、源缺帧、尺寸变化、过期、磁盘余量和编码退出可见，部分视频保留为incomplete。录像错误不发布动作或释放模型；开始前缺相机时由调用方阻止该次开始，用户可关闭选项再用。
 
 5项新增测试通过，含真实ffmpeg三路文件codec/尺寸检查及解码逐像素一致、队列满、序号缺口/过期、低余量和模拟ROS三订阅收尾manifest。跨项目针对性138通过/1既有跳过、前端146通过，Chromium入口通过。一个新领域模块按SHA随10文件安装，用户仅重载网页；现场三相机原本unavailable并保持，不启动相机/录制/动作，真实长视频吞吐未验收。默认自选视频根由Web已有目录校验负责，默认 `/media/agilex/Getea1/jiaan/data/videos/deployment`。详细证据cobot-web/outputs/motion-video-20261113/及现场cobot-web/runtime/verification/motion-video-20261113/；Guide Git未提交/推送。
+
+
+## 2026-11-15：可播放的小体积三路 MP4 与旧 AVI 转换
+
+用户明确短时raw AVI体积过大且VS Code不可播放，更新之前“不压缩”偏好。Dagger47cfc09（Web4a6f671）已push并同步现场：ThreeCameraVideo默认独立三路CPU libx264/main/yuv420p/CRF20/veryfast/faststart MP4，最高1920×1080、保持比例不放大小图；逐帧时间戳/序号、溢出/新鲜度/低磁盘/编码错误及不影响模型的边界保持，rawvideo以显式encoding兼容。此录像不改变训练HDF5或Replay。
+
+新增scripts/convert_deployment_videos.py与领域browser_video.py：只转换已收尾raw AVI，逐路单线程生成独立MP4，源前后SHA一致、解码帧数匹配后原子登记browser-video.json；不覆盖未知已有输出，可重复核验继续。现场两次motion归档6个AVI合计7,756,501,212bytes，新增MP4合计74,185,371bytes；帧数2090×3与715/716/715全部保留，当前640×480。原AVI、manifest、逐帧时间戳未改。压缩有损，不宣称像素一致。
+
+51跨项目相关CPU通过/1既有跳过、151Web前端通过；原raw像素往返显式配置回归保留，新增默认MP4编码/1080p上限/真实旧片转换/源SHA和帧数保持。正式浏览器两尺寸三路播放/seek/下载attachment通过，全部6文件完整HTTP SHA与Range206通过。11运行文件安装后仅Web重载，12受保护进程保持、模型offline/captureidle，无现场录制/运动/硬件生命周期。本次长时间新录制吞吐尚未真机验收。完整证据归cobot-web/outputs/video-download-replay-stop-20261113/，现场cobot-web/runtime/verification/video-downloads-mp4-20261115/；资产仍在Getea1/jiaan/data/videos/deployment两次motion目录。详见cobot-web/docs/MIGRATION.md对应节；guide不提交/push。
