@@ -179,3 +179,12 @@ src/capture_core/uncompressed_video.py 新增三路独立原分辨率BGR8 rawvid
 最终9项完整编码回归通过（含RGB补齐行/颜色逐字节验证、原raw像素、native1632→1440尺寸及完整帧数）；此前相关组合105CPU/1跳过、155前端。用户授权下三路10秒实录各303帧、CRF14/1440×1080/H264/yuv420p、saved，无序号/队列错误，ffprobe全解码计数一致。每路约12.09/13.83/14.15MB，下载HEAD MIME/长度验证通过。只录独立诊断视频，不采集HDF5/Replay、不发机器人指令；最终订阅退出、Web839683，模型与机械臂保持。后续真实长回放由用户复核，未冒充长时吞吐验收。
 
 成功视频 /media/agilex/Getea1/jiaan/data/videos/diagnostics/replay-quality-20261115/eval-20261115T152219-1a1f994a-2057341c ，原失败诊断另存，已有视频不改。详细证据cobot-web/outputs/replay-tracking-20261115及现场cobot-web/runtime/verification/replay-tracking-20261115。Guide只摘要不提交/push。
+
+
+## 2026-11-15 高清录像不完整回访修复
+
+用户实录7547afb3回放约146s，但三路在252/294/263帧时因queue full停止；之前独立10s通过不足以证明网页并发负载下持续录制。Daggerfe2ed55/后续f2f8c1f、Webfedfdaa/后续50527aa已push及SHA同步：录像ROS订阅/帧处理/ffmpeg改为自有子进程，独立worker_id/readiness/状态/stop/EOF收尾协议，网页只读小JSON；退出后回收worker及其编码器。无效/异常状态仍保留残件，不伪装完整。增加received/queue depth/peak，未扩大64帧队列。实际预览并发暴露编码与预览竞争，最终H264 CRF14/1440×1080保持，使用ultrafast/zerolatency/编码2线程/缩放1线程，实时JPEG预览限尺寸（当前816×612），不改原始缓存、录像或模型图像。
+
+63相关CPU/1跳过与最终15项编码/worker/预览隔离测试通过。最终真实网页预览开启（262次GET、写请求被拦截）下约10秒三路完整saved：304/304/305帧，live队列均0、峰值2/2/1，完整解码帧数与接收一致；对照旧配置10秒队列曾增长至25/28，未将这种短片误判为长时修复。用户要求尽快、简单检查，因此未长时间运动回放。仅Web839683→854335→859935，12保护身份含高清相机保持，没有重启相机/机械臂/模型、真实回放/CAN/归位或生产数据删除。诊断worker与浏览器均已退出。旧缺失片段无法补回，原incomplete文件保留。
+
+成功诊断视频 /media/agilex/Getea1/jiaan/data/videos/diagnostics/hd-worker-20261115/eval-20261115T154338-f407c4aa-85ed5526 ，1440×1080/H264/CRF14，每路约25.7–28.5MB；编码提速保持清晰度但文件更大。证据归cobot-web/outputs/hd-recording-followup-20261115，现场runtime/verification/hd-recording-worker-20261115，脚本/worktree归scratch相应项目/hd-recording-worker-20261115。保留现有严格监测默认关闭设置；不承诺真实故障不退出。guide只事实摘要，不提交/push。
