@@ -1,8 +1,7 @@
-"""Three independent native BGR video files; no resize, JPEG or lossy codec.
+"""Three independent camera archives, H.264 MP4 by default.
 
-The ROS adapter only subscribes. A bounded queue isolates disk I/O from camera
-callbacks. Overflow, stale input and write failures are visible archive errors;
-they never stop a model or publish robot commands.
+Legacy raw AVI remains explicitly available via encoding="rawvideo". The ROS
+adapter only subscribes; bounded queues isolate camera callbacks from encoding.
 """
 from __future__ import annotations
 
@@ -18,6 +17,7 @@ from uuid import uuid4
 
 import numpy as np
 from .topics import REQUIRED_TOPICS
+from .video_encoding import browser_encoding_args
 
 CAMERAS = ("camera_left", "camera_high", "camera_right")
 
@@ -28,14 +28,16 @@ def atomic_json(path, value):
 
 
 class CameraFile:
-    def __init__(self, root, key, *, fps=30, queue_frames=64, reserve_bytes=20*1024**3):
+    def __init__(self, root, key, *, fps=30, queue_frames=64, reserve_bytes=20*1024**3, encoding="h264"):
+        if encoding not in {"h264","rawvideo"}:raise ValueError("invalid_video_encoding")
+        self.encoding=encoding;self.extension="mp4" if encoding=="h264" else "avi"
         self.root=Path(root);self.key=key;self.fps=fps;self.reserve=reserve_bytes
         self.queue=Queue(maxsize=queue_frames);self.end=threading.Event()
         self.thread=None;self.process=None;self.error=None;self.frames=0
         self.last_arrival=None;self.shape=None;self.last_seq=None;self.log=None
 
     def start(self):
-        self.thread=threading.Thread(target=self._run,name="raw-"+self.key,daemon=True);self.thread.start()
+        self.thread=threading.Thread(target=self._run,name="video-"+self.key,daemon=True);self.thread.start()
 
     def offer(self, image, *, stamp, sequence=None):
         if self.end.is_set() or self.error:return
@@ -63,8 +65,9 @@ class CameraFile:
                         self.process=subprocess.Popen([
                             "ffmpeg","-nostdin","-hide_banner","-loglevel","error","-n",
                             "-f","rawvideo","-pixel_format","bgr24","-video_size","%dx%d"%(image.shape[1],image.shape[0]),
-                            "-framerate",str(self.fps),"-i","pipe:0","-an","-threads","1","-c:v","rawvideo","-pix_fmt","bgr24","-f","avi",
-                            str(self.root/(self.key+".incomplete.avi"))],stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=self.log)
+                            "-framerate",str(self.fps),"-i","pipe:0","-an"] +
+                            (browser_encoding_args() if self.encoding=="h264" else ["-threads","1","-c:v","rawvideo","-pix_fmt","bgr24","-f","avi"]) +
+                            [str(self.root/(self.key+".incomplete."+self.extension))],stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=self.log)
                     if image.shape!=self.shape:raise ValueError("camera dimensions changed")
                     if self.frames%30==0 and shutil.disk_usage(self.root).free<self.reserve:
                         raise OSError("video disk reserve reached")
@@ -84,7 +87,7 @@ class CameraFile:
                     self.process.kill();self.process.wait(timeout=3)
             if self.log:self.log.close()
             if not self.error and self.frames:
-                os.replace(self.root/(self.key+".incomplete.avi"),self.root/(self.key+".avi"))
+                os.replace(self.root/(self.key+".incomplete."+self.extension),self.root/(self.key+"."+self.extension))
             elif not self.frames:self.error=self.error or "no camera frames"
 
     def stop(self):
@@ -95,19 +98,29 @@ class CameraFile:
             if self.process and self.process.poll() is None:self.process.kill()
             self.thread.join(timeout=3)
 
+    def dimensions(self):
+        height,width=self.shape[:2]
+        ratio=min(1,1920/width,1080/height) if self.encoding=="h264" else 1
+        if self.encoding=="rawvideo":return width,height
+        return int(width*ratio)//2*2,int(height*ratio)//2*2
+
     def status(self):
         age=time.monotonic()-self.last_arrival if self.last_arrival is not None else None
         if not self.end.is_set() and age is not None and age>2:
             self.error=self.error or "camera stream stale";self.end.set()
         error=self.error
-        return {"frames":self.frames,"error":error,"width":self.shape[1] if self.shape else None,
-                "height":self.shape[0] if self.shape else None,"codec":"rawvideo","pixel_format":"bgr24",
+        return {"frames":self.frames,"error":error,"width":self.dimensions()[0] if self.shape else None,
+                "height":self.dimensions()[1] if self.shape else None,
+                "source_width":self.shape[1] if self.shape else None,"source_height":self.shape[0] if self.shape else None,"codec":self.encoding,
+                "pixel_format":"yuv420p" if self.encoding=="h264" else "bgr24", "max_resolution":[1920,1080] if self.encoding=="h264" else None,
                 "container_fps":self.fps,"timestamps":self.key+".timestamps.jsonl",
-                "file":self.key+(".avi" if self.end.is_set() and not error else ".incomplete.avi")}
+                "file":self.key+("." if self.end.is_set() and not error else ".incomplete.")+self.extension}
 
 
 class ThreeCameraVideo:
-    def __init__(self, root, *, metadata=None, reserve_bytes=20*1024**3):
+    def __init__(self, root, *, metadata=None, reserve_bytes=20*1024**3, encoding="h264"):
+        if encoding not in {"h264","rawvideo"}:raise ValueError("invalid_video_encoding")
+        self.encoding=encoding
         self.root=Path(root);self.metadata=metadata or {};self.writers={}
         self.subscribers=[];self.stopped=False;self.error=None;self.reserve=reserve_bytes
 
@@ -116,12 +129,12 @@ class ThreeCameraVideo:
         from .asset_storage import require_storage
         require_storage(self.root,write=True)
         self.root.mkdir(parents=True,exist_ok=False)
-        if shutil.disk_usage(self.root).free<self.reserve:raise RuntimeError("insufficient free space for uncompressed video")
+        if shutil.disk_usage(self.root).free<self.reserve:raise RuntimeError("insufficient free space for video")
         from .ros_subscriber import _load_ros_bindings
         bindings=_load_ros_bindings();bridge=bindings.cv_bridge_factory()
         try:
             for key in CAMERAS:
-                writer=CameraFile(self.root,key,reserve_bytes=self.reserve);self.writers[key]=writer;writer.start()
+                writer=CameraFile(self.root,key,reserve_bytes=self.reserve,encoding=self.encoding);self.writers[key]=writer;writer.start()
                 def receive(msg, writer=writer):
                     try:
                         image=bridge.imgmsg_to_cv2(msg,desired_encoding="bgr8")
@@ -144,7 +157,7 @@ class ThreeCameraVideo:
         errors=[v["error"] for v in cameras.values() if v["error"]]
         return {"state":"error" if self.error or errors else "saved" if self.stopped else "recording",
                 "error":self.error or "; ".join(errors) or None,"directory":str(self.root),
-                "uncompressed":True,"cameras":cameras,**self.metadata}
+                "uncompressed":self.encoding=="rawvideo","format":"mp4" if self.encoding=="h264" else "avi","cameras":cameras,**self.metadata}
 
     def _persist(self):atomic_json(self.root/"video.json",self.status())
 

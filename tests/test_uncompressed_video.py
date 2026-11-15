@@ -12,7 +12,7 @@ def test_three_raw_avi_files_decode_to_exact_native_pixels(tmp_path):
     assert shutil.which("ffmpeg")
     expected={}
     for index,key in enumerate(["camera_left","camera_high","camera_right"]):
-        writer=CameraFile(tmp_path,key,reserve_bytes=0);writer.start()
+        writer=CameraFile(tmp_path,key,reserve_bytes=0,encoding="rawvideo");writer.start()
         frames=[np.full((12,16,3),index*30+i,dtype=np.uint8) for i in range(3)]
         expected[key]=b"".join(f.tobytes() for f in frames)
         for i,frame in enumerate(frames):writer.offer(frame,stamp=100+i/30,sequence=i)
@@ -33,8 +33,8 @@ def test_overflow_is_visible_and_not_reported_as_complete(tmp_path):
     writer.offer(image,stamp=1,sequence=1);writer.offer(image,stamp=2,sequence=2)
     assert writer.error and writer.end.is_set()
     writer.start();writer.stop()
-    assert not (tmp_path/"camera_left.avi").exists()
-    assert (tmp_path/"camera_left.incomplete.avi").exists()
+    assert not (tmp_path/"camera_left.mp4").exists()
+    assert (tmp_path/"camera_left.incomplete.mp4").exists()
 
 
 def test_source_gaps_and_staleness_retained_after_stop(tmp_path):
@@ -52,7 +52,7 @@ def test_source_gaps_and_staleness_retained_after_stop(tmp_path):
 def test_low_disk_retains_partial_and_error(tmp_path):
     writer=CameraFile(tmp_path,"camera_left",reserve_bytes=2**70)
     writer.start();writer.offer(np.zeros((12,16,3),dtype=np.uint8),stamp=1,sequence=1);writer.stop()
-    assert "reserve" in writer.error and not (tmp_path/"camera_left.avi").exists()
+    assert "reserve" in writer.error and not (tmp_path/"camera_left.mp4").exists()
 
 
 def test_ros_adapter_subscribes_three_original_topics_and_saves_manifest(tmp_path,monkeypatch):
@@ -75,4 +75,34 @@ def test_ros_adapter_subscribes_three_original_topics_and_saves_manifest(tmp_pat
     assert set(state["cameras"])==set(CAMERAS)
     manifest=json.loads((root/"video.json").read_text())
     assert manifest["run_id"]=="test" and all(v["frames"]==3 for v in manifest["cameras"].values())
-    assert all((root/(key+".avi")).is_file() for key in CAMERAS)
+    assert manifest["uncompressed"] is False and manifest["format"]=="mp4"
+    for key in CAMERAS:
+        path=root/(key+".mp4");assert path.is_file()
+        probe=json.loads(subprocess.check_output(["ffprobe","-v","error","-show_streams","-of","json",str(path)]))["streams"][0]
+        assert probe["codec_name"]=="h264" and probe["pix_fmt"]=="yuv420p"
+        assert (probe["width"],probe["height"])==(16,12)
+        assert path.read_bytes().index(b"moov")<path.read_bytes().index(b"mdat")
+
+
+def test_mp4_downscales_to_1080p_without_upscaling(tmp_path):
+    writer=CameraFile(tmp_path,"camera_left",reserve_bytes=0);writer.start()
+    writer.offer(np.zeros((1440,2560,3),dtype=np.uint8),stamp=1,sequence=1);writer.stop()
+    assert writer.error is None
+    probe=json.loads(subprocess.check_output(["ffprobe","-v","error","-show_streams","-of","json",str(tmp_path/"camera_left.mp4")]))["streams"][0]
+    assert (probe["width"],probe["height"])==(1920,1080)
+
+
+def test_legacy_export_preserves_sources_and_exact_frames(tmp_path):
+    from capture_core.browser_video import convert_archive,sha256
+    root=tmp_path/"archive";root.mkdir();cameras={};original={}
+    for key in ["camera_left","camera_high","camera_right"]:
+        writer=CameraFile(root,key,reserve_bytes=0,encoding="rawvideo");writer.start()
+        for i in range(4):writer.offer(np.full((48,64,3),i*40,dtype=np.uint8),stamp=i/30,sequence=i)
+        writer.stop();cameras[key]=writer.status();original[key]=sha256(root/(key+".avi"))
+    manifest=root/"video.json";manifest.write_text(json.dumps({"state":"saved","uncompressed":True,"cameras":cameras}));before=manifest.read_bytes()
+    output=convert_archive(root)
+    assert all(row["frames"]==4 and row["codec"]=="h264" for row in output["cameras"].values())
+    assert all(sha256(root/(key+".avi"))==digest for key,digest in original.items())
+    assert manifest.read_bytes()==before and convert_archive(root)==output
+    manifest.write_text(json.dumps({"state":"recording","uncompressed":True}))
+    with pytest.raises(ValueError):convert_archive(root)
