@@ -188,3 +188,9 @@ src/capture_core/uncompressed_video.py 新增三路独立原分辨率BGR8 rawvid
 63相关CPU/1跳过与最终15项编码/worker/预览隔离测试通过。最终真实网页预览开启（262次GET、写请求被拦截）下约10秒三路完整saved：304/304/305帧，live队列均0、峰值2/2/1，完整解码帧数与接收一致；对照旧配置10秒队列曾增长至25/28，未将这种短片误判为长时修复。用户要求尽快、简单检查，因此未长时间运动回放。仅Web839683→854335→859935，12保护身份含高清相机保持，没有重启相机/机械臂/模型、真实回放/CAN/归位或生产数据删除。诊断worker与浏览器均已退出。旧缺失片段无法补回，原incomplete文件保留。
 
 成功诊断视频 /media/agilex/Getea1/jiaan/data/videos/diagnostics/hd-worker-20261115/eval-20261115T154338-f407c4aa-85ed5526 ，1440×1080/H264/CRF14，每路约25.7–28.5MB；编码提速保持清晰度但文件更大。证据归cobot-web/outputs/hd-recording-followup-20261115，现场runtime/verification/hd-recording-worker-20261115，脚本/worktree归scratch相应项目/hd-recording-worker-20261115。保留现有严格监测默认关闭设置；不承诺真实故障不退出。guide只事实摘要，不提交/push。
+
+
+## 2026-11-22 录像队列过载与单路失败隔离
+用户截图cd78dea09bd943a4923e245202c5b157录像right队列64满，1051written/1052received；left1058/high1057无单路error，但worker原先见任何error即停止整组，造成87.5s正常完成回放的录像提前终止。不是Web“不完整”误标，不改旧残件标签。用户要求避免复发，Dagger5e9edad现场直播优先探测NVENC（实际320×240帧初始化，失败fallbacklibx264），硬件H264/QP18/原1440×1080/yuv420p30FPS；原软件/历史转换profile保持，模型和相机不变。worker只有全部相机失败才提前结束，单路错误保留且其他路继续至用户结束；不隐瞒缺帧或扩大队列。
+16CPU通过（16×12夹具固定软件路径）；现场独立合成6秒三路1632×1224输入/1440×1080输出均180/180帧、queuepeak5/4/4、errornull，6.31s完成。验证硬件并发基本吞吐，未做真实长时间录制/运动，不承诺USB/磁盘或所有过载永不发生。NVENC测试初始化64×64不支持后改320×240；不当作现场硬件不可用。
+提交push后3模块旧SHA备份原子同步，下次独立录制worker生效，无Web/模型/相机/硬件重启或运动。证据Web outputs/video-overload-20261122/{tests.log,synthetic.json,source-install.json}；现场cobot-web/runtime/verification/video-overload-20261122含candidate、synthetic视频、synthetic-result.json、3.before和安装回执。
