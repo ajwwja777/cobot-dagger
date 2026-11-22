@@ -73,3 +73,21 @@ def test_existing_archive_cannot_be_reused_or_overwritten(tmp_path):
     root=tmp_path/'existing';root.mkdir();(root/'keep').write_text('data')
     with pytest.raises(ValueError):ProcessVideo(root).start()
     assert (root/'keep').read_text()=='data'
+
+
+def test_one_failed_camera_does_not_end_healthy_camera_recordings():
+    from capture_core.video_process import has_recording_camera
+    assert has_recording_camera({'state':'error','cameras':{
+        'left':{'frames':40,'error':None},'right':{'error':'queue full'}}})
+    assert not has_recording_camera({'state':'error','cameras':{'right':{'error':'disk full'}}})
+
+
+def test_live_encoder_falls_back_when_hardware_unavailable(monkeypatch):
+    import subprocess
+    from capture_core.video_encoding import select_live_encoder,live_encoding_args
+    monkeypatch.setattr(subprocess,'run',lambda *a,**kw:SimpleNamespace(returncode=1))
+    assert select_live_encoder()=='libx264'
+    monkeypatch.setattr(subprocess,'run',lambda *a,**kw:SimpleNamespace(returncode=0))
+    assert select_live_encoder()=='h264_nvenc'
+    assert 'h264_nvenc' in live_encoding_args('h264_nvenc')
+    assert 'libx264' in live_encoding_args('libx264')

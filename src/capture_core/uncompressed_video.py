@@ -17,7 +17,7 @@ from uuid import uuid4
 
 import numpy as np
 from .topics import REQUIRED_TOPICS
-from .video_encoding import browser_encoding_args
+from .video_encoding import live_encoding_args, select_live_encoder
 
 CAMERAS = ("camera_left", "camera_high", "camera_right")
 
@@ -28,8 +28,9 @@ def atomic_json(path, value):
 
 
 class CameraFile:
-    def __init__(self, root, key, *, fps=30, queue_frames=64, reserve_bytes=20*1024**3, encoding="h264"):
+    def __init__(self, root, key, *, fps=30, queue_frames=64, reserve_bytes=20*1024**3, encoding="h264", encoder="libx264"):
         if encoding not in {"h264","rawvideo"}:raise ValueError("invalid_video_encoding")
+        self.encoder=encoder
         self.encoding=encoding;self.extension="mp4" if encoding=="h264" else "avi"
         self.root=Path(root);self.key=key;self.fps=fps;self.reserve=reserve_bytes
         self.queue=Queue(maxsize=queue_frames);self.end=threading.Event()
@@ -71,7 +72,7 @@ class CameraFile:
                             "ffmpeg","-nostdin","-hide_banner","-loglevel","error","-n",
                             "-f","rawvideo","-pixel_format",self.input_pixel_format,"-video_size","%dx%d"%(image.shape[1],image.shape[0]),
                             "-framerate",str(self.fps),"-i","pipe:0","-an"] +
-                            (browser_encoding_args() if self.encoding=="h264" else ["-threads","1","-c:v","rawvideo","-pix_fmt","bgr24","-f","avi"]) +
+                            (live_encoding_args(self.encoder) if self.encoding=="h264" else ["-threads","1","-c:v","rawvideo","-pix_fmt","bgr24","-f","avi"]) +
                             [str(self.root/(self.key+".incomplete."+self.extension))],stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=self.log)
                     if image.shape!=self.shape:raise ValueError("camera dimensions changed")
                     if self.frames%30==0 and shutil.disk_usage(self.root).free<self.reserve:
@@ -117,7 +118,7 @@ class CameraFile:
         return {"frames":self.frames,"received_frames":self.received_frames,"queue_depth":self.queue.qsize(),"queue_peak":self.queue_peak,"queue_capacity":self.queue.maxsize,"error":error,"width":self.dimensions()[0] if self.shape else None,
                 "height":self.dimensions()[1] if self.shape else None,
                 "input_pixel_format":self.input_pixel_format,"source_width":self.shape[1] if self.shape else None,"source_height":self.shape[0] if self.shape else None,"codec":self.encoding,
-                "pixel_format":"yuv420p" if self.encoding=="h264" else "bgr24", "crf":14 if self.encoding=="h264" else None, "max_resolution":[1920,1080] if self.encoding=="h264" else None,
+                "pixel_format":"yuv420p" if self.encoding=="h264" else "bgr24", "encoder":self.encoder if self.encoding=="h264" else "rawvideo", "qp":18 if self.encoding=="h264" and self.encoder=="h264_nvenc" else None, "crf":14 if self.encoding=="h264" and self.encoder=="libx264" else None, "max_resolution":[1920,1080] if self.encoding=="h264" else None,
                 "container_fps":self.fps,"timestamps":self.key+".timestamps.jsonl",
                 "file":self.key+("." if self.end.is_set() and not error else ".incomplete.")+self.extension}
 
@@ -137,9 +138,10 @@ class ThreeCameraVideo:
         if shutil.disk_usage(self.root).free<self.reserve:raise RuntimeError("insufficient free space for video")
         from .ros_subscriber import _load_ros_bindings
         bindings=_load_ros_bindings();bridge=bindings.cv_bridge_factory()
+        encoder=select_live_encoder() if self.encoding=="h264" else "rawvideo"
         try:
             for key in CAMERAS:
-                writer=CameraFile(self.root,key,reserve_bytes=self.reserve,encoding=self.encoding);self.writers[key]=writer;writer.start()
+                writer=CameraFile(self.root,key,reserve_bytes=self.reserve,encoding=self.encoding,encoder=encoder);self.writers[key]=writer;writer.start()
                 def receive(msg, writer=writer):
                     try:
                         encoding=getattr(msg,"encoding",None)

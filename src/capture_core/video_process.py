@@ -69,6 +69,10 @@ class ProcessVideo:
         return self.status()
 
 
+def has_recording_camera(status):
+    return any(not camera.get("error") for camera in status.get("cameras", {}).values())
+
+
 def run_worker(args):
     from .ros_subscriber import _load_ros_bindings
     from .uncompressed_video import ThreeCameraVideo
@@ -90,7 +94,8 @@ def run_worker(args):
         video.start()
         while not stop.is_set():
             value=video.status();persist(value)
-            if value.get("state")=="error":break
+            # One failed camera must not truncate the other two archives.
+            if value.get("state")=="error" and not has_recording_camera(value):break
             stop.wait(.25)
     except Exception as exc:error=str(exc)
     finally:

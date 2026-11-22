@@ -59,6 +59,8 @@ def test_ros_adapter_subscribes_three_original_topics_and_saves_manifest(tmp_pat
     from types import SimpleNamespace
     from capture_core.uncompressed_video import ThreeCameraVideo,CAMERAS
     from capture_core import ros_subscriber
+    # Tiny CPU fixtures are below the hardware encoder minimum dimensions.
+    monkeypatch.setattr("capture_core.uncompressed_video.select_live_encoder",lambda:"libx264")
     topics=[];closed=[]
     image=np.arange(16*12*3,dtype=np.uint8).reshape(12,16,3)
     def subscribe(topic,kind,callback,**kwargs):
